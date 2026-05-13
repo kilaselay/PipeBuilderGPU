@@ -26,6 +26,7 @@ namespace PipeBuilder
 
         public float labelHeight = 0.2f;
 
+        [HideInInspector]
         public List<Vector3> worldPoints;
 
         private Action<int> _recalculateWorldPointAction;
@@ -39,6 +40,7 @@ namespace PipeBuilder
         private void Reset()
         {
             _pipePoints?.Clear();
+            worldPoints = new List<Vector3>();
 
             _pipePoints = new List<Vector3>()
             {
