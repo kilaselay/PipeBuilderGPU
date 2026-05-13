@@ -1,0 +1,312 @@
+#include "MathForPipe.hlsl"
+
+#pragma kernel CalculateStraightVertices
+#pragma kernel SetStraightTriangles
+#pragma kernel CalculateConnectionsSegments
+#pragma kernel CalculateCircleSegments
+#pragma kernel CalculateConnectionsVertices
+#pragma kernel SetDefaultNearestVertices
+#pragma kernel PreventTwisting
+#pragma kernel SetConnectionsTriangles
+#pragma kernel SetEndCapsTriangles
+
+cbuffer _constantsBuffer
+{
+    // x -> radius; y -> connection offset; z -> max float value
+    float3 rad_conOff_maxFV;
+    
+    int facesCount;
+    
+    int straightSegmentsCount;
+    int connectionSegmentsCount;
+    int connectionBeltsCount;
+};
+
+int preventTwistingIteration;
+
+StructuredBuffer<CircleVertices> _straightSegmentsPointsBuffer;
+StructuredBuffer<ConnectionSegmentPoints> _connectionSegmentsPointsBuffer;
+
+RWStructuredBuffer<ConnectionSegment> _connectionSegmentsBuffer;
+RWStructuredBuffer<CircleSegment> _circleSegmentsBuffer;
+RWStructuredBuffer<NearestConnectionVertex> _connectionsNearestVerticesBuffer;
+
+RWStructuredBuffer<float3> _verticesBuffer;
+RWStructuredBuffer<float3> _normalsBuffer;
+RWStructuredBuffer<int> _trianglesBuffer;
+
+/////////////////////////////////////////////////////////////////////
+// CALCULATIONS OF STRAIGHT PIPE SEGMENTS:
+
+// Calculate the positions of the vertices of straight pipe segments
+// id.x -> count of straight pipe segments
+// id.y -> count of faces
+[numthreads(2,1,1)]
+void CalculateStraightVertices (uint3 id : SV_DispatchThreadID)
+{ 
+    int index = id.x * facesCount + id.y;
+    
+	float angle = radians(360.0 / facesCount);
+    
+    Axes axes = GetCirclesAxes(_straightSegmentsPointsBuffer[id.x].direction);
+	
+    float3 currentVertex = _straightSegmentsPointsBuffer[id.x].center +
+        (rad_conOff_maxFV.x * cos(angle * id.y) * axes.xAxis) +
+        (rad_conOff_maxFV.x * sin(angle * id.y) * axes.yAxis);
+    
+    float3 normal = normalize(currentVertex - _straightSegmentsPointsBuffer[id.x].center);
+	
+    _verticesBuffer[index] = currentVertex;
+    _normalsBuffer[index] = normal;
+}
+
+// Set the indexes of polygons of straight pipe segments
+// id.x -> count of straight pipe segments
+// id.y -> count of faces
+[numthreads(1,1,1)]
+void SetStraightTriangles (uint3 id : SV_DispatchThreadID)
+{
+	int verticesOffset = id.x * facesCount * 2;
+	int trianglesOffset = facesCount * id.x * 6 + id.y * 6;
+    
+    _trianglesBuffer[trianglesOffset] = (verticesOffset + id.y);
+    _trianglesBuffer[trianglesOffset + 1] = (verticesOffset + (id.y + 1) % facesCount);
+    _trianglesBuffer[trianglesOffset + 2] = (verticesOffset + id.y + facesCount);
+    
+    _trianglesBuffer[trianglesOffset + 3] = (verticesOffset + (id.y + 1) % facesCount + facesCount);
+    _trianglesBuffer[trianglesOffset + 4] = (verticesOffset + id.y + facesCount);
+    _trianglesBuffer[trianglesOffset + 5] = (verticesOffset + (id.y + 1) % facesCount);
+    
+}
+
+// END CALCULATIONS OF STRAIGHT PIPE SEGMENTS
+
+/////////////////////////////////////////////////////////////////////
+// CALCULATIONS OF PIPE CONNECTION SEGMENTS:
+
+// Calculate pipe connection segments
+// id.x -> count of connection pipe segments
+[numthreads(1,1,1)]
+void CalculateConnectionsSegments (uint3 id : SV_DispatchThreadID)
+{
+    float3 startOffset = normalize(_connectionSegmentsPointsBuffer[id.x].center - _connectionSegmentsPointsBuffer[id.x].start) * rad_conOff_maxFV.y;
+    float3 endOffset = normalize(_connectionSegmentsPointsBuffer[id.x].end - _connectionSegmentsPointsBuffer[id.x].center) * rad_conOff_maxFV.y;
+
+    float3 startPoint = _connectionSegmentsPointsBuffer[id.x].center - startOffset;
+    float3 endPoint = _connectionSegmentsPointsBuffer[id.x].center + endOffset;
+
+	float3 torusCenter = GetTorusCenter(startPoint, startOffset, endPoint, endOffset);
+    
+    float actualTorusRadius = length(torusCenter - startPoint);
+
+	TorusSegment torusSegment;
+
+	torusSegment.torusCenter = torusCenter;
+	torusSegment.torusRadius = actualTorusRadius;
+
+	float3 xAxis = normalize(startPoint - torusCenter);
+	float3 yAxis = normalize(endPoint - torusCenter);
+
+	float angle = GetTorusAngle(xAxis, yAxis);
+    float radianPerSegment = angle / connectionBeltsCount;
+
+	ConnectionSegment segment;
+
+    segment.axes = OrthoNormalize(xAxis, yAxis);
+	segment.torusSegment = torusSegment;
+	segment.radianPerSegment = radianPerSegment;
+
+    _connectionSegmentsBuffer[id.x] = segment;
+}
+
+// Returns the center of the circle of vertices of the pipe connection
+float3 CalculateCircleCenter(int connectionSegmendID, int connectionBeltID)
+{
+	float3 x = _connectionSegmentsBuffer[connectionSegmendID].torusSegment.torusRadius *
+        cos(_connectionSegmentsBuffer[connectionSegmendID].radianPerSegment * connectionBeltID) *
+        _connectionSegmentsBuffer[connectionSegmendID].axes.xAxis;
+    
+    float3 y = _connectionSegmentsBuffer[connectionSegmendID].torusSegment.torusRadius * 
+        sin(_connectionSegmentsBuffer[connectionSegmendID].radianPerSegment * connectionBeltID) * 
+        _connectionSegmentsBuffer[connectionSegmendID].axes.yAxis;
+
+    return _connectionSegmentsBuffer[connectionSegmendID].torusSegment.torusCenter + x + y;
+}
+
+// Calculate the segment of the circle of vertices of the pipe connection
+void CalculateCircleSegment(int connectionSegmendID, int connectionBeltID)
+{
+    int index = (connectionSegmendID * connectionBeltsCount + connectionBeltID) - (connectionSegmendID + 1);
+    
+    float3 circleCenter = CalculateCircleCenter(connectionSegmendID, connectionBeltID);
+
+    float3 previosCircleCenter = CalculateCircleCenter(connectionSegmendID, connectionBeltID - 1);
+
+	CircleSegment circleSegment;
+
+	circleSegment.center = circleCenter;
+
+    circleSegment.axes = GetCirclesAxes(normalize(circleCenter - previosCircleCenter));
+
+    _circleSegmentsBuffer[index] = circleSegment;
+}
+
+// Calculate the segments of the circle of vertices of the pipe connection segments
+// id.x -> count of connection pipe segments
+// id.y -> count of connection belts for 1 connection pipe segment
+[numthreads(1,1,1)]
+void CalculateCircleSegments (uint3 id : SV_DispatchThreadID)
+{
+    if (id.y != 0)
+        CalculateCircleSegment(id.x, id.y);
+}
+
+// Calculate the vertices of the pipe connections segments
+// id.x -> count of circles of vertices for all connection pipe segments
+// id.y -> count of faces
+[numthreads(1,1,1)]
+void CalculateConnectionsVertices (uint3 id : SV_DispatchThreadID)
+{
+    int straightVerticesOffset = facesCount * 2 * straightSegmentsCount;
+    int index = straightVerticesOffset + id.x * facesCount + id.y;
+    
+	float angle = radians(360.0 / facesCount);
+
+	float3 x = rad_conOff_maxFV.x * cos(angle * id.y) * _circleSegmentsBuffer[id.x].axes.xAxis;
+    float3 y = rad_conOff_maxFV.x * sin(angle * id.y) * _circleSegmentsBuffer[id.x].axes.yAxis;
+
+    float3 currentVertex = _circleSegmentsBuffer[id.x].center + x + y;
+	
+    float3 normal = normalize(currentVertex - _circleSegmentsBuffer[id.x].center);
+    
+    _verticesBuffer[index] = currentVertex;
+    _normalsBuffer[index] = normal;
+}
+
+// Set the nearest vertices by default
+// id.x -> count of connection pipe segments
+// id.y -> count of connection belts for 1 connection pipe segment
+// id.z -> count of faces
+[numthreads(1, 1, 1)]
+void SetDefaultNearestVertices (uint3 id : SV_DispatchThreadID)
+{
+    int index = id.x * connectionBeltsCount * facesCount + id.y * facesCount + id.z;
+    
+    NearestConnectionVertex newNearestVertex;
+		
+    newNearestVertex.vertexIndex = 0;
+    newNearestVertex.distance = rad_conOff_maxFV.z;
+    
+    _connectionsNearestVerticesBuffer[index] = newNearestVertex;
+}
+
+// Prevent twisting on the pipe connections segments
+// id.x -> count of connection pipe segments
+// id.y -> count of connection belts for 1 connection pipe segment
+// id.z -> count of faces
+[numthreads(1,1,1)]
+void PreventTwisting(uint3 id : SV_DispatchThreadID)
+{
+    int nearestVertexIndex = id.x * connectionBeltsCount * facesCount + id.y * facesCount + id.z;
+    
+    int straightVerticesOffset = facesCount * 2 * straightSegmentsCount;
+    int circlesCount = connectionBeltsCount - 1;
+    
+    int isYzero = id.y == 0;
+    int isYcircleCount = id.y == circlesCount;
+    int isYdefault = id.y != 0 && id.y != circlesCount;
+    
+    int startOffset1 = facesCount + 2 * facesCount * id.x;
+    int endOffset1 = straightVerticesOffset + circlesCount * facesCount * id.x;
+    
+    int startOffset2 = straightVerticesOffset + (facesCount * (circlesCount - 1) + (facesCount * circlesCount * id.x));
+    int endOffset2 = facesCount * 2 + facesCount * 2 * id.x;
+    
+    int endOffset3 = straightVerticesOffset + id.y * facesCount + (facesCount * circlesCount * id.x);
+    int startOffset3 = endOffset3 - facesCount;
+    
+    int startOffset = startOffset1 * isYzero + startOffset2 * isYcircleCount + startOffset3 * isYdefault;
+    int endOffset = endOffset1 * isYzero + endOffset2 * isYcircleCount + endOffset3 * isYdefault;
+    
+    int currentVerticesIndex = startOffset + id.z;
+    int nextVerticesIndex = endOffset + preventTwistingIteration;
+	
+    float currentDistance = distance(_verticesBuffer[currentVerticesIndex], _verticesBuffer[nextVerticesIndex]);
+    
+    NearestConnectionVertex nearestVertex = _connectionsNearestVerticesBuffer[nearestVertexIndex];
+    
+    int isMinDistance = currentDistance < nearestVertex.distance;
+    
+    nearestVertex.vertexIndex = isMinDistance * nextVerticesIndex + Inverse(isMinDistance) * nearestVertex.vertexIndex;
+    nearestVertex.distance = isMinDistance * currentDistance + Inverse(isMinDistance) * nearestVertex.distance;
+    
+    _connectionsNearestVerticesBuffer[nearestVertexIndex] = nearestVertex;
+}
+
+// Generate a quad of pipe connection polygons
+void GenerateConnectionQuad(int startOffset, int endOffset, int currentFace, int trianglesOffset)
+{  
+    int zeroOrOne = any(facesCount - (currentFace + 1));
+    int interimCalc = 1 - zeroOrOne * facesCount;
+    int next = interimCalc - sign(interimCalc) * facesCount;
+    
+    _trianglesBuffer[trianglesOffset] = startOffset + currentFace;
+    _trianglesBuffer[trianglesOffset + 1] = startOffset + (currentFace + 1) % facesCount;
+    _trianglesBuffer[trianglesOffset + 2] = _connectionsNearestVerticesBuffer[endOffset].vertexIndex;
+    
+    _trianglesBuffer[trianglesOffset + 3] = _connectionsNearestVerticesBuffer[endOffset + next].vertexIndex;
+    _trianglesBuffer[trianglesOffset + 4] = _connectionsNearestVerticesBuffer[endOffset].vertexIndex;
+    _trianglesBuffer[trianglesOffset + 5] = startOffset + (currentFace + 1) % facesCount;
+}
+
+// Set the indexes of polygons of pipe connections segments
+// id.x -> count of connection pipe segments
+// id.y -> count of connection belts for 1 connection pipe segment
+// id.z -> count of faces
+[numthreads(1, 1, 1)]
+void SetConnectionsTriangles(uint3 id : SV_DispatchThreadID)
+{
+    int straightVerticesOffset = facesCount * 2 * straightSegmentsCount;
+    int straightTrianglesOffset = straightSegmentsCount * facesCount * 6;
+    int trianglesOffset = straightTrianglesOffset + id.x * connectionBeltsCount * facesCount * 6 + id.y * facesCount * 6 + id.z * 6;
+    
+    int nearestVertexIndex = id.x * connectionBeltsCount * facesCount + id.y * facesCount + id.z;
+    int circlesCount = connectionBeltsCount - 1;
+    
+    int isYzero = id.y == 0;
+    int isYcircleCount = id.y == circlesCount;
+    int isYdefault = id.y != 0 && id.y != circlesCount;
+    
+    int startOffset1 = facesCount + 2 * facesCount * id.x;
+    int startOffset2 = straightVerticesOffset + (facesCount * (circlesCount - 1) + (facesCount * circlesCount * id.x));
+    int startOffset3 = (straightVerticesOffset + id.y * facesCount + (facesCount * circlesCount * id.x)) - facesCount;
+    
+    int startOffset = startOffset1 * isYzero + startOffset2 * isYcircleCount + startOffset3 * isYdefault;
+    
+    GenerateConnectionQuad(startOffset, nearestVertexIndex, id.z, trianglesOffset);
+}
+
+// END CALCULATIONS OF PIPE CONNECTION SEGMENTS
+/////////////////////////////////////////////////////////////////////
+
+// Set the indexes of polygons of pipe end caps
+// id.x -> (count of faces) - 2
+[numthreads(1, 1, 1)]
+void SetEndCapsTriangles(uint3 id : SV_DispatchThreadID)
+{
+    int endCircleOffset = straightSegmentsCount * facesCount * 2 - facesCount;
+    
+    int straightTrianglesOffset = straightSegmentsCount * facesCount * 6;
+    int connectionTrianglesOffset = connectionSegmentsCount * connectionBeltsCount * facesCount * 6;
+    
+    int startTrianglesIndex = id.x * 3 + straightTrianglesOffset + connectionTrianglesOffset;
+    int endTrianglesIndex = id.x * 3 + (facesCount - 2) * 3 + straightTrianglesOffset + connectionTrianglesOffset;
+
+    _trianglesBuffer[startTrianglesIndex] = 0;
+    _trianglesBuffer[startTrianglesIndex + 1] = id.x + 2;
+    _trianglesBuffer[startTrianglesIndex + 2] = id.x + 1;
+    
+    _trianglesBuffer[endTrianglesIndex] = endCircleOffset;
+    _trianglesBuffer[endTrianglesIndex + 1] = endCircleOffset + id.x + 1;
+    _trianglesBuffer[endTrianglesIndex + 2] = endCircleOffset + id.x + 2;
+}

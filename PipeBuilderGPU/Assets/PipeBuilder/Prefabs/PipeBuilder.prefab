@@ -1,0 +1,83 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &8711307190068813705
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8710698462209067320}
+  - component: {fileID: 9152620194518977581}
+  - component: {fileID: 7971521051560629836}
+  m_Layer: 0
+  m_Name: PipeBuilder
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8710698462209067320
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8711307190068813705}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &9152620194518977581
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8711307190068813705}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fab47dd918127284d9e19c7750c898a1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _pipePoints:
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 1, z: 0}
+  _pipeData:
+    radius: 0.5
+    facesCount: 10
+    connectionOffsetCoef: 1.1
+    connectionBeltsCount: 4
+  _isDrawGizmo: 1
+  _pipePathColor:
+    serializedVersion: 2
+    rgba: 4278255360
+  isDrawHandles: 1
+  labelTextSize: 20
+  labelHeight: 0.2
+  worldPoints:
+  - {x: 0, y: 0, z: 0}
+  - {x: 0, y: 1, z: 0}
+--- !u!114 &7971521051560629836
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8711307190068813705}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8acabb7e84d83b041bd725cff15bddc3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _pipesShader: {fileID: 7200000, guid: e642011cc9c31a742be782548e7c7882, type: 3}
+  _pipeMaterial: {fileID: 2100000, guid: 770e563061fe6cf4693ba1b6b206bea3, type: 2}
+  _pipeName: Pipe
+  _isRecalculateBounds: 1
+  _isRecalculateTangents: 0
+  _isGenerateInPlayMode: 1
