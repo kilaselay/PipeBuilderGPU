@@ -4,9 +4,9 @@
 
 ---
 
-**PipeBuilder** позволяет процедурно создавать трубчатую геометрию как с помощью инструментов редактора (*PipePathCreator*, *PipeGenerator*) так и в процессе выполнения (*PipeBuilderGPU*), выполняя все математические вычисления параллельно на видеокарте с помощью вычислительных шейдеров. Такой подход позоляет значительно сократить время создания Mesh во время выполнения.
+**PipeBuilder** allows you to procedurally create a pipe geometry using both the editor tools (*PipePathCreator*, *PipeGenerator*) so it is during execution (*PipeBuilderGPU*), performing all mathematical calculations in parallel on the GPU using compute shaders. This approach significantly reduces the time it takes to create a Mesh at runtime.
 
-*PipeBuilderGPU* принимает в конструктор файл вычислительного шейдера *PipeCompute* и содержит единственный метод *Create*, принимающий список точек (путь прохождения трубы) и структуру с параметрами трубы *PipeData* (радиус, количество граней, коэффициент отступа соединительного сегмента, количество поясов соединительного сегмента), и возвращающий Mesh содержащий вершины, нормали и треугольники.
+*PipeBuilderGPU* accepts the *PipeCompute* computational shader file into the constructor and contains a single *Create* method that accepts a list of points (the path of the pipe) and a structure with pipe parameters *PipeData* (radius, number of faces, indentation coefficient of the connecting segment, number of belts of the connecting segment), and returns a Mesh containing vertices, normals and triangles.
 
 ```c#
 public Mesh Create(List<Vector3> points, PipeData pipeData)
@@ -28,68 +28,68 @@ public struct PipeData
     public int connectionBeltsCount;
 }
 ```
-При создании автоматически проведется валидация полученных данных на соответствие минимальным требованиям входных параметров. Также автоматически будут исключены дублирующиеся и коллинеарные точки. Если требуется построить только прямой сегмент трубы и используется всего 2 точки, алгоритм отработает быстрее, так как не будет использовать более сложные рассчеты для построения соединительных сегментов.
+During creation, the received data will be automatically validated to meet the minimum requirements of the input parameters. Duplicate and collinear points will also be automatically excluded. If you need to build only a straight pipe segment and only 2 points are used, the algorithm will work faster, since it will not use more complex calculations to build connecting segments.
 
-При построеннии не создаются лишние точки и скрытые полигоны на границах прямых и соединительных сегментов труб. Заглушки на концах труб формируются без создания дополнительных центральных вершин, поэтому содержат меньше треугольников. Все выделенные для вычислений буфферы автоматически освобождаются по завершению работы метода *Create* и его повторно можно вызывать с другими входными данными.
+During construction, unnecessary points and hidden polygons are not created on the borders of straight and connecting pipe segments. The plugs at the ends of the pipes are formed without creating additional central vertices, so they contain fewer triangles. All buffers allocated for calculations are automatically released upon completion of the *Create* method and it can be called again with other input data.
 
 ## PipePathCreator
 
-Для создания геометрии труб в редакторе существуют всего 2 компонента, один из которых служит для построения пути:
+To create a pipe geometry in the editor, there are only 2 components, one of which is used to build a path:
 
 ![Path сreation tool inspector](Images/PipePathCreatorInspector.png)
 
-Инструмент содержит список точек прохождения трубы, в локальных координатах, которые пересчитываются относительно самого GameObject, также здесь находится структура *PipeData* с параметрами трубы и ниже настройки отладки редактора.
+The tool contains a list of pipe points, in local coordinates, which are recalculated relative to the GameObject itself, and there is also a *PipeData* structure with pipe parameters and editor debugging settings below.
 
 ![A tool for creating a path on the stage](Images/Tool.png)
 
-Позиции точек можно изменять как с помощью списка в инспекторе, так и на сцене, кликнув по белому квадрату с номером точки. Выбранная точка включает встроенный инструмент изменения позции Unity. Каждое изменение можно отменить за счёт поддержки в редакторе команды Undo, так же Unity уведомит о несохранённых изменениях при выходе со сцены.
+The positions of the points can be changed both using the list in the inspector and on the scene by clicking on the white square with the point number. The selected point activate the built-in Unity position change tool. Each change can be undone by using the Undo command in the editor, and Unity will notify you of unsaved changes when you exit the stage.
 
-Размер точек соответствует настроенному радиусу. Точки поменьше показывают границы, где будут распологаться края соединительных сегментов в соответствии с настроенным коэффициентов отступа.
+The size of the points corresponds to the configured radius. The smaller dots indicate the boundaries where the edges of the connecting segments will be located in accordance with the connection offset coefficients.
 
-В настройках отладки можно включить/выключить отображение Gizmo и работу инструмента на сцене (включая активные точки и номера вершин над ними), настроить цвет Gismo, а также настроить размер отображаемых номеров точек на сцене и их высоту над позицией.
+In the debugging settings, you can enable/disable the display of Gizmo and the operation of the tool on the scene (including active points and vertex numbers above them), adjust the color of Gismo, as well as adjust the size of the displayed point numbers on the stage and their height above the position.
 
 ## PipeGenerator
 
-Второй компонент служит для создания объекта с Mesh трубы, при нахождении на объекте требует наличия компонента *PipePathCreator* поэтому создаст его автоматически при отсутствии.
+The second component is used to create an object with a Mesh pipe. When located on the object, it requires the *PipePathCreator* component, so it will create it automatically if it is not present.
 
 ![Pipe generator inspector window](Images/PipeGeneratorInspector.png)
 
-Здесь нужно указать ресурс вычислительного шейдера "PipeCompute", материал который применится к модели и имя создаваемого объекта. Также при создании можно указать нужно ли пересчитывать границы модели и тангенты. Последний параметр отвечает за то, нужно ли генерировать объект при в режмие выполнения. Этот параметр можно отключить, если компонент требуется для создания модели в редакторе.
+Here you need to specify the resource of the compute shader "PipeCompute", the material that will be applied to the model, and the name of the object being created. Also, when creating it, you can specify whether the model bounds and tangents need to be recalculated. The last parameter is responsible for whether the object needs to be generated during execution. You can disable this option if the component is required to create a model in the editor.
 
-Для создания объекта с моделью в редакторе нужно с помощью клика правой кнопки мыши открыть контекстное меню компонента и в появившемся списке внизу выбрать нужную опцию:
+To create an object with a model in the editor, right-click to open the context menu of the component and select the desired option in the list below:
 
 ![Context menu of the pipe generator](Images/GeneratePipeMenu.png)
 
-Можно просто создать объект трубы на сцене, либо создать и сохранить Mesh. Модель сохранится как *.asset* в корне папки ассетов и будет иметь заданное в компоненте имя, о чем будет отправлено сообщение в консоль Unity.
+You can simply create a pipe object on the stage, or create and save a Mesh. The model will be saved as *.asset* in the root of the assets folder and will have the name specified in the component, which will be sent a message to the Unity console.
 
-## Параметры создания трубы
+## Pipe creation parameters
 
-Рассмотрим влияние параметров генерации на итоговую модель.
+Let's consider the influence of the generation parameters on the final model.
 
 ### FacesCount
 
-Параметр позволяет задать количество граней трубы, что является её степенью сглаживания:
+The parameter allows you to set the number of pipe faces, which is its degree of smoothing:
 
 ![The difference is the number of faces](Images/FacesCount.png)
 
-Минимальное количество граней - 3. Количество зависит от требуемой формы/гладкости модели.
+The minimum number of faces is 3. The number depends on the desired shape/smoothness of the model.
 
 ### ConnectionOffsetCoef
 
-Параметр влияет на то, насколько далеко от точки изгиба могут формироваться пояса полигонов соединения трубы:
+This parameter affects how far away from the bending point the belts of pipe connection polygons can be formed:
 
 ![The difference in the offset coefficients of the pipe connections segments](Images/ConnectionOffsetCoef.png)
 
-Чем больше коэффициент отступа соединения трубы, тем плавнее получается её изгиб. Минимальное значение 1.1.
+The greater the connection offset coefficient of the pipe, the smoother its bending is obtained. The minimum value is 1.1.
 
 ### ConnectionBeltsCount
 
-Параметр влияет на количество поясов полигонов в соединительном сегменте трубы, степень сглаженности изгиба:
+The parameter affects the number of polygon belts in the connection segment of the pipe, the degree of smoothness of the bend:
 
 ![The difference is the number of connection belts](Images/ConnectionBeltsCount.png)
 
-Чем больше поясов полигонов в соединении, тем плавнее выглядит изгиб. Минимальное количество 3. В каждом поясе количество полигонов равно удвоенному количеству граней.
+The more polygon belts there are in the connection, the smoother the bend looks. The minimum quantity is 3. In each belt, the number of polygons is equal to twice the number of faces.
 
 ---
 
-Решение работает на любой дискретной видеокарте, а также при наличии DirectX 12.
+The solution works on any discrete GPU, as well as with DirectX 12.
