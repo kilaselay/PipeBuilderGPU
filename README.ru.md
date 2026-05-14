@@ -1,3 +1,9 @@
+Дополнительные страницы:
+
+[ReadMe.EN](README.md)
+
+---
+
 # PipeBuilderGPU
 
 ![PipeBuilder-generated pipe models](Images/Preview.png)
