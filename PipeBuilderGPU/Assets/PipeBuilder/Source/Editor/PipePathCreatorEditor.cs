@@ -13,13 +13,9 @@ namespace PipeBuilder.Editor
 
         private GUIStyle _labelStyle;
 
-        private void Reset()
-        {
-            _labelStyle = new GUIStyle();
+        private void Reset() => InitializeLabelStyle();
 
-            _labelStyle.alignment = TextAnchor.MiddleCenter;
-            _labelStyle.fontStyle |= FontStyle.Bold;
-        }
+        private void OnEnable() => InitializeLabelStyle();
 
         private void OnSceneGUI()
         {
@@ -79,6 +75,14 @@ namespace PipeBuilder.Editor
 
             if(Handles.Button(pointPosition, Quaternion.identity, size * _handleSize, size * _pickSize, Handles.DotHandleCap))
                 _selectedPoint = pointNumber;
+        }
+
+        private void InitializeLabelStyle()
+        {
+            _labelStyle = new GUIStyle();
+
+            _labelStyle.alignment = TextAnchor.MiddleCenter;
+            _labelStyle.fontStyle |= FontStyle.Bold;
         }
     }
 }

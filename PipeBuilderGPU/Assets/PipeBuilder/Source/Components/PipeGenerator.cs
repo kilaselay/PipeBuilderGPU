@@ -1,5 +1,6 @@
 using UnityEditor;
 using UnityEngine;
+using System;
 
 namespace PipeBuilder
 {
@@ -38,7 +39,56 @@ namespace PipeBuilder
                 Generate();
         }
 
+        private void Initialize()
+        {
+            _pipesShader = Instantiate(_pipesShader);
+
+            _pipeBuilderGPU = new PipeBuilderGPU(_pipesShader);
+        }
+
+        private void Generate()
+        {
+            var pipeMesh = CreatePipeMesh();
+            CreatePipeObject(pipeMesh);
+        }
+
+        private Mesh CreatePipeMesh()
+        {
+            var pipeCreator = GetComponent<PipePathCreator>();
+
+            if (pipeCreator == null)
+                throw new Exception($"{nameof(PipePathCreator)} is null");
+
+            var mesh = _pipeBuilderGPU.Create(pipeCreator.PipePoints, pipeCreator.PipeData);
+
+            if (_isRecalculateBounds)
+                mesh.RecalculateBounds();
+
+            if (_isRecalculateTangents)
+                mesh.RecalculateTangents();
+
+            mesh.name = _pipeName;
+
+            return mesh;
+        }
+
+        private void CreatePipeObject(Mesh pipeMesh)
+        {
+            var pipeOjbect = new GameObject(_pipeName);
+
+            pipeOjbect.transform.position = transform.position;
+            pipeOjbect.transform.rotation = transform.rotation;
+            pipeOjbect.transform.localScale = transform.localScale;
+
+            var meshFilter = pipeOjbect.AddComponent<MeshFilter>();
+            meshFilter.mesh = pipeMesh;
+
+            var meshRenderer = pipeOjbect.AddComponent<MeshRenderer>();
+            meshRenderer.material = _pipeMaterial;
+        }
+
 #if UNITY_EDITOR
+
         [ContextMenu("Generate pipe")]
         private void GeneratePipe()
         {
@@ -50,56 +100,22 @@ namespace PipeBuilder
         private void GeneratePipeAndSave()
         {
             Initialize();
-            Generate(true);
+            GenerateAndSave();
+        }
+
+        private void GenerateAndSave()
+        {
+            var pipeMesh = CreatePipeMesh();
+
+            var path = $"Assets/{_pipeName}.asset";
+
+            AssetDatabase.CreateAsset(pipeMesh, path);
+
+            Debug.Log($"<color=lime>[PipeGenerator]</color> Mesh saved in \"{path}\"");
+
+            CreatePipeObject(pipeMesh);
         }
 #endif
-
-        private void Initialize()
-        {
-            _pipesShader = Instantiate(_pipesShader);
-
-            _pipeBuilderGPU = new PipeBuilderGPU(_pipesShader);
-        }
-
-        private void Generate(bool isSaveMesh = false)
-        {
-            var pipeCreator = GetComponent<PipePathCreator>();
-
-            if (pipeCreator == null)
-                return;
-
-            var mesh = _pipeBuilderGPU.Create(pipeCreator.PipePoints, pipeCreator.PipeData);
-
-            if(_isRecalculateBounds)
-                mesh.RecalculateBounds();
-
-            if(_isRecalculateTangents)
-                mesh.RecalculateTangents();
-
-            mesh.name = _pipeName;
-
-#if UNITY_EDITOR
-            if (isSaveMesh)
-            {
-                var path = $"Assets/{_pipeName}.asset";
-
-                AssetDatabase.CreateAsset(mesh, path);
-
-                Debug.Log($"<color=lime>[PipeGenerator]</color> Mesh saved in \"{path}\"");
-            }
-#endif
-            var pipeOjbect = new GameObject(_pipeName);
-
-            pipeOjbect.transform.position = transform.position;
-            pipeOjbect.transform.rotation = transform.rotation;
-            pipeOjbect.transform.localScale = transform.localScale;
-
-            var meshFilter = pipeOjbect.AddComponent<MeshFilter>();
-            meshFilter.mesh = mesh;
-
-            var meshRenderer = pipeOjbect.AddComponent<MeshRenderer>();
-            meshRenderer.material = _pipeMaterial;
-        }
 
     }
 }
